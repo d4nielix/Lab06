@@ -119,7 +119,7 @@ public class SensorActivity extends AppCompatActivity implements SensorEventList
                 downPath = new Path();
                 upPath.arcTo(animRect, 90f, -180f, true);
                 downPath.arcTo(animRect, 270f, -180f, true);
-                mainContainer.getViewTreeObserver().removeOnGlobalFocusChangeListener(this);
+                mainContainer.getViewTreeObserver().removeOnGlobalLayoutListener(this);
                 layoutReady = true;
             }
         });
@@ -256,7 +256,7 @@ public class SensorActivity extends AppCompatActivity implements SensorEventList
 
         colorAnimation.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
+            public void onAnimationUpdate(ValueAnimator animator) {
                 mainContainer.setBackgroundColor((int) animator.getAnimatedValue());
             }
         });
