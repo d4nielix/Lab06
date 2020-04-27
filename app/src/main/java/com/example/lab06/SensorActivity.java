@@ -1,7 +1,10 @@
 package com.example.lab06;
 
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.dynamicanimation.animation.DynamicAnimation;
+import androidx.dynamicanimation.animation.FlingAnimation;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -9,13 +12,18 @@ import android.animation.AnimatorSet;
 import android.animation.ArgbEvaluator;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Path;
 import android.graphics.RectF;
+import android.hardware.Camera;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -26,11 +34,11 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.nio.file.Path;
 
 import static java.lang.Math.abs;
 import static java.lang.Math.min;
 
+@RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 public class SensorActivity extends AppCompatActivity implements SensorEventListener {
 
     private Sensor mSensor;
@@ -110,7 +118,6 @@ public class SensorActivity extends AppCompatActivity implements SensorEventList
                 upPath = new Path();
                 downPath = new Path();
                 upPath.arcTo(animRect, 90f, -180f, true);
-                //wczytac inna klase Path
                 downPath.arcTo(animRect, 270f, -180f, true);
                 mainContainer.getViewTreeObserver().removeOnGlobalFocusChangeListener(this);
                 layoutReady = true;
@@ -138,6 +145,21 @@ public class SensorActivity extends AppCompatActivity implements SensorEventList
 
         TextView valueTextView = findViewById(R.id.sensorValues);
         valueTextView.setText(stringBuilder.toString());
+
+        if(layoutReady){
+            switch(sensorType){
+                case Sensor.TYPE_LIGHT:
+                    handleLightSensor(event.values[0]);
+                    break;
+                case Sensor.TYPE_PROXIMITY:
+                    if(hasFlash)
+                        handleProximitySensor(event.values[0]);
+                    break;
+                case Sensor.TYPE_ACCELEROMETER:
+                    handleAccelerationSensor(event.values[0]);
+                    break;
+            }
+        }
     }
 
     @Override
@@ -157,6 +179,8 @@ public class SensorActivity extends AppCompatActivity implements SensorEventList
         super.onPause();
         if(mSensor != null)
             MainActivity.mSensorManager.unregisterListener(this, mSensor);
+        if(isFlashOn)
+            toogleFlash(false);
     }
 
     private void handleLightSensor(float sensorValue){
@@ -189,7 +213,7 @@ public class SensorActivity extends AppCompatActivity implements SensorEventList
             moonAnimator.setDuration(2000);
             moonAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
             moonFadeAnimator = ObjectAnimator.ofFloat(moonImgView, "alpha", moonFromAlpha, moonToAlpha);
-            moodFadeAnimator.setInterpolator(new AccelerateInterpolator());
+            moonFadeAnimator.setInterpolator(new AccelerateInterpolator());
             moonFadeAnimator.setDuration(2200);
 
             sunAnimator = ObjectAnimator.ofFloat(sunImgView, View.X, View.Y, sunPath);
@@ -255,7 +279,64 @@ public class SensorActivity extends AppCompatActivity implements SensorEventList
                         .setMinValue(5)
                         .setMaxValue(screenWidth - imgEdgeSize - 5)
                         .setFriction(1f);
+                flingX.addEndListener(new DynamicAnimation.OnAnimationEndListener() {
+                    @Override
+                    public void onAnimationEnd(DynamicAnimation dynamicAnimation, boolean b, float v, float vl) {
+                        if(vl != 0){
+                            FlingAnimation reflingX = new FlingAnimation(ballImgView, DynamicAnimation.X);
+                            reflingX.setStartVelocity(-1 * vl)
+                                    .setMinValue(5)
+                                    .setMaxValue(screenWidth - imgEdgeSize - 5)
+                                    .setFriction(1.25f)
+                                    .start();
+                            reflingX.addEndListener(new DynamicAnimation.OnAnimationEndListener() {
+                                @Override
+                                public void onAnimationEnd(DynamicAnimation animation, boolean canceled, float value, float velocity) {
+                                    animFlag = false;
+                                }
+                            });
+                        }else{
+                            animFlag = false;
+                        }
+                    }
+                });
+                flingX.start();
             }
         }
+    }
+
+    private void handleProximitySensor(float sensorValue){
+        if(!animFlag && (sensorValue == 0)){
+            animFlag = true;
+            toogleFlash(true);
+        }else if(animFlag && (sensorValue > 0)){
+            animFlag = false;
+            toogleFlash(false);
+        }
+    }
+
+    private void toogleFlash(boolean on){
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
+            CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            try{
+                cameraManager.setTorchMode(cameraManager.getCameraIdList()[0], on);
+            }catch (CameraAccessException e){
+                e.printStackTrace();
+            }
+        }else{
+            Camera camera = Camera.open();
+            Camera.Parameters parameters = camera.getParameters();
+            if(on)
+                parameters.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
+            else parameters.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+            camera.setParameters(parameters);
+            if(on)
+                camera.startPreview();
+            else{
+                camera.stopPreview();
+                camera.release();
+            }
+        }
+        isFlashOn = on;
     }
 }
